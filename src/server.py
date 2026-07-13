@@ -9,9 +9,7 @@ import azure.cognitiveservices.speech as speechsdk
 from openai import AzureOpenAI
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, Response
-'''
-  don t forget to add the api keys
-'''
+chat_history = []
 TEMP_DIR = "temp_audio"
 os.makedirs(TEMP_DIR, exist_ok=True)
 REPLY_FILE_PATH = os.path.join(TEMP_DIR, "reply.wav")
@@ -20,6 +18,20 @@ app = FastAPI()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 log = logging.getLogger("VoiceAssistant")
 
+# --- CREDENTIALS CONFIGURATION ---
+AZURE_SPEECH_KEY = os.environ.get("AZURE_SPEECH_KEY", "key")
+AZURE_SERVICE_REGION = os.environ.get("AZURE_REGION", "rsrc-region")
+
+AZURE_OPENAI_KEY = os.environ.get("AZURE_OPENAI_KEY", "key")
+AZURE_OPENAI_ENDPOINT = os.environ.get("AZURE_OPENAI_ENDPOINT", "https://your_enpoint.azure.com")
+AZURE_OPENAI_MODEL = os.environ.get("AZURE_OPENAI_MODEL", "gpt-4o-mini")
+
+# Initialize the Azure OpenAI Client (API Version 2024-02-01 is safe & standard)
+ai_client = AzureOpenAI(
+    api_key=AZURE_OPENAI_KEY,
+    api_version="2024-02-01",
+    azure_endpoint=AZURE_OPENAI_ENDPOINT
+)
 
 def _speech_to_text_sync(file_path: str) -> str:
     """
@@ -143,6 +155,7 @@ async def process_voice(request: Request):
         log.info(f"[LLM RESULT] AI response: {ai_response}")
 
         await asyncio.to_thread(_generate_8bit_tts_sync, ai_response, REPLY_FILE_PATH)
+        chat_history.append({"user": user_text, "ai": ai_response})
         return Response(content="SUCCESS", media_type="text/plain")
 
     except Exception as main_ex:
@@ -159,3 +172,95 @@ async def get_reply_audio():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8888)
+# --- DIGITAL TWIN DASHBOARD ENDPOINT (SHOWS RECENT ACTIVE SESSION ONLY) ---
+@app.get("/", response_class=HTMLResponse)
+async def digital_twin_dashboard():
+    chat_html = ""
+    if not chat_history:
+        chat_html = "<p style='color: #888; text-align: center;'>No conversations yet during this session. Speak into the device!</p>"
+    else:
+        # [:5] ensures that only the 5 most recent exchanges since launch are displayed
+        recent_chats = reversed(chat_history[-5:]) 
+        for chat in recent_chats:
+            chat_html += f"""
+            <div class="chat-block">
+                <div class="user-msg"><strong>🧒 User (ESP32):</strong> {chat['user']}</div>
+                <div class="ai-msg"><strong>🤖 Assistant (AI):</strong> {chat['ai']}</div>
+            </div>
+            """
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>ESP32 Digital Twin Console</title>
+        <meta http-equiv="refresh" content="5">
+        <style>
+            body {{
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background-color: #121214;
+                color: #e0e0e0;
+                margin: 0;
+                padding: 20px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+            }}
+            .container {{
+                width: 100%;
+                max-width: 700px;
+                background: #1a1a1e;
+                border-radius: 12px;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+                padding: 20px;
+                box-sizing: border-box;
+            }}
+            h1 {{
+                text-align: center;
+                color: #4f46e5;
+                margin-top: 0;
+            }}
+            .status-bar {{
+                text-align: center;
+                font-size: 0.9em;
+                color: #a7f3d0;
+                background: #064e3b;
+                padding: 8px;
+                border-radius: 6px;
+                margin-bottom: 20px;
+            }}
+            .chat-block {{
+                background: #26262b;
+                border-left: 4px solid #4f46e5;
+                padding: 12px 16px;
+                margin-bottom: 15px;
+                border-radius: 0 8px 8px 0;
+            }}
+            .user-msg {{
+                color: #60a5fa;
+                margin-bottom: 6px;
+            }}
+            .ai-msg {{
+                color: #34d399;
+            }}
+            .footer {{
+                text-align: center;
+                margin-top: 15px;
+                font-size: 0.8em;
+                color: #6b7280;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🎙️ ESP32 Voice Twin Live</h1>
+            <div class="status-bar">● Current Session Log (Auto-refreshing every 5s)</div>
+            <div id="chat-container">
+                {chat_html}
+            </div>
+            <div class="footer">Hardware Interface Live Stream Dashboard</div>
+        </div>
+    </body>
+    </html>
+    """
+    return html_content
