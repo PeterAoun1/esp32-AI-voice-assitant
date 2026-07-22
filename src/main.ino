@@ -7,6 +7,7 @@
 // --- CONFIGURATION ---
 const char* ssid = "wifi name";
 const char* password = "wifi password";
+const char* welcomeUrl = "http://ip@:8888/welcome";
 const char* serverUrl = "http://ip@:8888/process_voice";
 const char* downloadUrl = "http://ip@:8888/reply.wav";
 #define I2S_WS    27  
@@ -101,6 +102,43 @@ bool playWavOnDAC25(const char *path) {
   return true;
 }
 
+bool downloadAndPlayReply() {
+  HTTPClient http;
+  http.begin(downloadUrl);
+  int downloadCode = http.GET();
+  bool ok = false;
+  if (downloadCode == 200) {
+    File f = SPIFFS.open("/reply.wav", FILE_WRITE);
+    if (f) {
+      http.writeToStream(&f);
+      f.close();
+      ok = playWavOnDAC25("/reply.wav");
+    }
+  } else {
+    Serial.printf("Download failed, HTTP Error: %d\n", downloadCode);
+  }
+  http.end();
+  return ok;
+}
+
+// Robot speaks first: offers story / count / alphabet
+bool playWelcome() {
+  Serial.println("\n>>> Asking server for welcome message...");
+  HTTPClient http;
+  http.begin(welcomeUrl);
+  http.setTimeout(30000);
+  int code = http.POST("");
+  http.end();
+
+  if (code != 200) {
+    Serial.printf("Welcome failed, HTTP Error: %d\n", code);
+    return false;
+  }
+
+  delay(300);
+  return downloadAndPlayReply();
+}
+
 void recordAndProcess() {
   size_t bytesRead;
   File recordFile = SPIFFS.open("/recording.raw", FILE_WRITE);
@@ -130,33 +168,21 @@ void recordAndProcess() {
   http.begin(serverUrl); 
   http.addHeader("Content-Type", "application/octet-stream");
   
-  // FIX: Attach explicit length tracking parameters
   String lengthString = String(uploadFile.size());
   http.addHeader("Content-Length", lengthString.c_str());
   
-  http.setTimeout(15000); 
+  http.setTimeout(30000); 
 
   int code = http.sendRequest("POST", &uploadFile, uploadFile.size());
   uploadFile.close(); 
+  http.end();
   
   if (code == 200) {
-    http.end(); 
-    delay(500); 
-
-    http.begin(downloadUrl);
-    int downloadCode = http.GET();
-    if (downloadCode == 200) {
-      File f = SPIFFS.open("/reply.wav", FILE_WRITE);
-      if (f) {
-        http.writeToStream(&f);
-        f.close();
-        playWavOnDAC25("/reply.wav");
-      }
-    }
+    delay(300); 
+    downloadAndPlayReply();
   } else {
     Serial.printf("Server upload failed, HTTP Error: %d\n", code);
   }
-  http.end();
 }
 
 void setup() {
@@ -188,7 +214,15 @@ void setup() {
   i2s_set_pin(I2S_NUM_0, &pin_config);
   
   delay(1000);
-  recordAndProcess();
+
+  // 1) Robot starts the conversation with the activity menu
+  playWelcome();
+
+  // 2) Then keep talking: listen -> reply -> listen...
+  while (true) {
+    recordAndProcess();
+    delay(500);
+  }
 }
 
 void loop() {}
