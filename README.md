@@ -1,6 +1,6 @@
 # ESP32 AI Voice Assistant
 
-An AI-powered voice assistant built with an ESP32 that enables natural voice interactions using Microsoft Azure AI services. The system records speech, processes it in the cloud, generates an AI response, converts it back to speech, and plays it through a speaker. :contentReference[oaicite:0]{index=0}
+An AI-powered voice assistant built with an ESP32 that enables natural voice interactions using Microsoft Azure AI services. The system records speech, processes it in the cloud, generates an AI response, converts it back to speech, and plays it through a speaker. 
 
 ## Features
 
@@ -84,7 +84,7 @@ Speaker
 
 - Peter Aoun
 - Rudy Karim
-- Jean-Paul Achkouti :contentReference[oaicite:2]{index=2}
+- Jean-Paul Achkouti 
 
 ## License
 
