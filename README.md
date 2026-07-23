@@ -88,4 +88,4 @@ Speaker
 
 ## License
 
-This project was developed for educational purposes as part of an engineering project at the École Supérieure d'Ingénieurs de Beyrouth (ESIB).
+This project was developed for educational purposes as part of an engineering internship project at the École Supérieure d'Ingénieurs de Beyrouth (ESIB).
